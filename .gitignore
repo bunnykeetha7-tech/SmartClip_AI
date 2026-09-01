@@ -1,0 +1,26 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local/runtime files
+uploads/*
+!uploads/.gitkeep
+*.wav
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
