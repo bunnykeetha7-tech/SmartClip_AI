@@ -1029,23 +1029,23 @@ def run_one_click_job(
                 CLIPS_DIR / cf
             )
 
-            dur = (
-                h['end']
-                - h['start']
-            )
+            # Add context around each detected highlight
+            clip_start = max(0, h['start'] - 5)
+            clip_end = min(duration, h['end'] + 5)
+            clip_duration = clip_end - clip_start
 
-            if dur <= 0:
+            if clip_duration <= 0:
                 continue
 
             cmd([
                 'ffmpeg',
                 '-y',
                 '-ss',
-                str(h['start']),
+                str(clip_start),
                 '-i',
                 str(final),
                 '-t',
-                str(dur),
+                str(clip_duration),
                 '-c:v',
                 'libx264',
                 '-preset',
@@ -1070,8 +1070,10 @@ def run_one_click_job(
                     f'/video/clip/{cf}',
                 'start': h['start'],
                 'end': h['end'],
+                'clip_start': round(clip_start, 2),
+                'clip_end': round(clip_end, 2),
                 'duration': round(
-                    dur,
+                    clip_duration,
                     2
                 ),
                 'score': h['score'],
