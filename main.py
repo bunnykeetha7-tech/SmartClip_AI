@@ -611,7 +611,6 @@ def run_one_click_job(
             )
 
         if whisper_model is None:
-
             jobs[job_id].update({
                 'progress': 35,
                 'message': 'Loading Whisper model...'
@@ -622,11 +621,11 @@ def run_one_click_job(
                 device='cpu'
             )
 
-        wav = (
-            UPLOAD_DIR
-            / f'{final.stem}.wav'
-        )
+        wav = UPLOAD_DIR / f'{final.stem}.wav'
 
+        # --------------------------------------------------------
+        # Extract audio as mono 16 kHz WAV
+        # --------------------------------------------------------
         cmd([
             'ffmpeg',
             '-y',
@@ -647,17 +646,25 @@ def run_one_click_job(
             'message': 'Running speech recognition...'
         })
 
+        # --------------------------------------------------------
+        # Whisper transcription
+        # --------------------------------------------------------
         try:
             transcription_result = whisper_model.transcribe(
                 str(wav),
                 word_timestamps=True,
-                fp16=False
+                fp16=False,
+                temperature=0,
+                condition_on_previous_text=False
             )
+
         except Exception as e:
             raise RuntimeError(
                 f'Whisper transcription failed: {e}'
             )
+
         finally:
+            # Always remove temporary WAV
             try:
                 wav.unlink()
             except Exception:
