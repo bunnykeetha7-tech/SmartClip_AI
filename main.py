@@ -624,6 +624,7 @@ def run_one_click_job(
                 'Whisper is not installed.'
             )
 
+        # Load Whisper only once and keep it in memory.
         if whisper_model is None:
             jobs[job_id].update({
                 'progress': 35,
@@ -635,11 +636,17 @@ def run_one_click_job(
                 device='cpu'
             )
 
+        # --------------------------------------------------------
+        # Extract audio from video
+        # --------------------------------------------------------
+
         wav = UPLOAD_DIR / f'{final.stem}.wav'
 
-        # --------------------------------------------------------
-        # Extract audio as mono 16 kHz WAV
-        # --------------------------------------------------------
+        jobs[job_id].update({
+            'progress': 40,
+            'message': 'Extracting audio...'
+        })
+
         cmd([
             'ffmpeg',
             '-y',
@@ -655,27 +662,67 @@ def run_one_click_job(
             str(wav)
         ])
 
-        print('=== AUDIO DEBUG ===')
-        print('WAV path:', wav)
-        print('WAV exists:', wav.exists())
-        print('WAV size:', wav.stat().st_size if wav.exists() else 0)
+        # --------------------------------------------------------
+        # AUDIO DEBUG INFORMATION
+        # --------------------------------------------------------
+
+        try:
+            audio_size_mb = wav.stat().st_size / (1024 * 1024)
+
+            print(
+                f'WHISPER AUDIO: {wav.name}'
+            )
+
+            print(
+                f'WHISPER AUDIO SIZE: {audio_size_mb:.2f} MB'
+            )
+
+            print(
+                f'WHISPER VIDEO DURATION: {duration:.2f} seconds'
+            )
+
+            print(
+                f'WHISPER MODEL: {WHISPER_MODEL}'
+            )
+
+            print(
+                'WHISPER DEVICE: CPU'
+            )
+
+        except Exception as e:
+            print(
+                'WHISPER AUDIO DEBUG ERROR:',
+                repr(e)
+            )
+
+        # --------------------------------------------------------
+        # WHISPER TRANSCRIPTION
+        # --------------------------------------------------------
 
         jobs[job_id].update({
             'progress': 50,
             'message': 'Running speech recognition...'
         })
 
-        # --------------------------------------------------------
-        # Whisper transcription
-        # --------------------------------------------------------
         try:
             transcription_result = whisper_model.transcribe(
                 str(wav),
-                word_timestamps=True,
-                fp16=False,
+
+                # Deterministic transcription
                 temperature=0,
+
+                # Prevent previous text from influencing
+                # later parts of long videos.
                 condition_on_previous_text=False,
-                verbose=True,
+
+                # Needed for timestamped segments.
+                word_timestamps=True,
+
+                # CPU-safe setting.
+                fp16=False,
+
+                # Show Whisper progress in Railway logs.
+                verbose=True
             )
 
         except Exception as e:
@@ -683,14 +730,28 @@ def run_one_click_job(
                 f'Whisper transcription failed: {e}'
             )
 
-        # finally:
-        #     # Always remove temporary WAV
-        #     try:
-        #         wav.unlink()
-        #     except Exception:
-        #         pass
+        # --------------------------------------------------------
+        # KEEP WAV FOR DEBUGGING
+        # --------------------------------------------------------
+        #
+        # DO NOT DELETE IT temporarily.
+        #
+        # After everything works correctly, we can enable:
+        #
+        # try:
+        #     wav.unlink()
+        # except Exception:
+        #     pass
+        #
 
-        if not isinstance(transcription_result, dict):
+        # --------------------------------------------------------
+        # VALIDATE WHISPER RESULT
+        # --------------------------------------------------------
+
+        if not isinstance(
+            transcription_result,
+            dict
+        ):
             raise RuntimeError(
                 'Whisper returned an invalid transcription result.'
             )
@@ -704,12 +765,17 @@ def run_one_click_job(
             or 'unknown'
         )
 
+        # --------------------------------------------------------
+        # BUILD TIMESTAMPED SEGMENTS
+        # --------------------------------------------------------
+
         segments = []
 
         for segment in transcription_result.get(
             'segments',
             []
         ):
+
             text = (
                 segment.get('text') or ''
             ).strip()
@@ -723,11 +789,40 @@ def run_one_click_job(
             )
 
             if text and end > start:
+
                 segments.append({
                     'text': text,
                     'start': round(start, 2),
                     'end': round(end, 2),
                 })
+
+        # --------------------------------------------------------
+        # FALLBACK IF WHISPER FOUND NO SPEECH
+        # --------------------------------------------------------
+
+        if not transcript:
+
+            print(
+                'WHISPER RESULT: No speech detected.'
+            )
+
+        else:
+
+            print(
+                f'WHISPER RESULT: {len(transcript)} characters'
+            )
+
+            print(
+                f'WHISPER SEGMENTS: {len(segments)}'
+            )
+
+        print(
+            f'WHISPER LANGUAGE: {language}'
+        )
+
+        # --------------------------------------------------------
+        # CREATE SUMMARY
+        # --------------------------------------------------------
 
         sentences = [
             s.strip()
