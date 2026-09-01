@@ -455,8 +455,22 @@ def run_one_click_job(
                 'no_warnings': True,
             }
 
-            with yt_dlp.YoutubeDL(opts) as y:
-                info = y.extract_info(original_url, download=True)
+            try:
+                with yt_dlp.YoutubeDL(opts) as y:
+                    info = y.extract_info(original_url, download=True)
+
+            except Exception as e:
+                error_text = str(e)
+
+                if "Sign in to confirm you’re not a bot" in error_text:
+                    raise RuntimeError(
+                        "YouTube is currently blocking this download. "
+                        "Please upload the video file instead."
+                    )
+
+                raise RuntimeError(
+                    f"YouTube download failed: {error_text}"
+                )
 
             candidates = [
                 p for p in UPLOAD_DIR.glob(f'download_{ident}.*')
