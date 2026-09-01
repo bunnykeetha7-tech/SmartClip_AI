@@ -171,44 +171,87 @@ def compression_level(x):
     x=(x or 'medium').lower().strip()
     if x not in {'original','low','medium','high'}: raise HTTPException(400,'Invalid compression level.')
     return x
-def compress(p,level):
-    level=compression_level(level)
-    if level=='original': return p
-    out=UPLOAD_DIR/f'{p.stem}_{level}.mp4'
-    cmd = [
+def compress(p, level):
+    level = compression_level(level)
+
+    if level == 'original':
+        return p
+
+    out = UPLOAD_DIR / f'{p.stem}_{level}.mp4'
+
+    # Compression settings
+    if level == 'low':
+        crf = '24'
+        preset = 'veryfast'
+    elif level == 'medium':
+        crf = '28'
+        preset = 'ultrafast'
+    else:  # high
+        crf = '32'
+        preset = 'ultrafast'
+
+    command = [
         'ffmpeg',
         '-y',
+
+        # Input
         '-i', str(p),
-        '-vf', 'scale=1280:-2',
+
+        # Resize large videos to 720p
+        '-vf', 'scale=-2:720',
+
+        # Video
         '-c:v', 'libx264',
-        '-preset', 'veryfast',
-        '-crf', '28',
-        '-threads', '2',
+        '-preset', preset,
+        '-crf', crf,
+
+        # Keep CPU usage reasonable
+        '-threads', '1',
+
+        # Compatible MP4
         '-pix_fmt', 'yuv420p',
+
+        # Audio
         '-c:a', 'aac',
-        '-b:a', '128k',
+        '-b:a', '96k',
+
+        # Streaming-friendly MP4
         '-movflags', '+faststart',
-        str(out),
+
+        str(out)
     ]
+
     try:
-        subprocess.run(
-            cmd,
-            check=True,
+        result = subprocess.run(
+            command,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            timeout=600,
+            timeout=1200
         )
+
     except subprocess.TimeoutExpired:
         raise RuntimeError(
-            'FFmpeg compression timed out after 10 minutes.'
+            'Video compression timed out after 20 minutes.'
         )
-    except subprocess.CalledProcessError as e:
-        detail = (e.stderr or '').strip()[-4000:]
+
+    except Exception as e:
         raise RuntimeError(
-            'FFmpeg compression failed:\n' + detail
+            f'FFmpeg compression error: {e}'
         )
-    if not out.exists(): raise RuntimeError('Compressed file was not created')
+
+    if result.returncode != 0:
+        error = (result.stderr or '').strip()
+
+        raise RuntimeError(
+            'FFmpeg compression failed:\n' + error[-4000:]
+        )
+
+    if not out.exists() or out.stat().st_size == 0:
+        raise RuntimeError(
+            'Compressed video was not created.'
+        )
+
     return out
 
 def init_db():
@@ -642,7 +685,7 @@ def run_one_click_job(
 
         wav = UPLOAD_DIR / f'{final.stem}.wav'
 
-        jobs[job_id].update({
+        jobs[job_id].update({   
             'progress': 40,
             'message': 'Extracting audio...'
         })
