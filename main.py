@@ -655,6 +655,11 @@ def run_one_click_job(
             str(wav)
         ])
 
+        print('=== AUDIO DEBUG ===')
+        print('WAV path:', wav)
+        print('WAV exists:', wav.exists())
+        print('WAV size:', wav.stat().st_size if wav.exists() else 0)
+
         jobs[job_id].update({
             'progress': 50,
             'message': 'Running speech recognition...'
@@ -669,7 +674,8 @@ def run_one_click_job(
                 word_timestamps=True,
                 fp16=False,
                 temperature=0,
-                condition_on_previous_text=False
+                condition_on_previous_text=False,
+                verbose=True,
             )
 
         except Exception as e:
@@ -677,12 +683,12 @@ def run_one_click_job(
                 f'Whisper transcription failed: {e}'
             )
 
-        finally:
-            # Always remove temporary WAV
-            try:
-                wav.unlink()
-            except Exception:
-                pass
+        # finally:
+        #     # Always remove temporary WAV
+        #     try:
+        #         wav.unlink()
+        #     except Exception:
+        #         pass
 
         if not isinstance(transcription_result, dict):
             raise RuntimeError(
