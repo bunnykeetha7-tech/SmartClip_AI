@@ -1,6 +1,6 @@
-import os,re,json,uuid,shutil,hashlib,secrets,subprocess
+import os,re,json,uuid,shutil,hashlib,secrets,subprocess    
 from pathlib import Path
-from datetime import datetime,timedelta,timezone
+from datetime import datetime,timedelta,timezone    
 from urllib.parse import urlparse
 from typing import Optional
 import mysql.connector
@@ -171,8 +171,40 @@ def compression_level(x):
 def compress(p,level):
     level=compression_level(level)
     if level=='original': return p
-    out=UPLOAD_DIR/f'{p.stem}_{level}.mp4'; crf={'low':'30','medium':'26','high':'22'}[level]
-    cmd(['ffmpeg','-y','-i',str(p),'-c:v','libx264','-preset','medium','-crf',crf,'-pix_fmt','yuv420p','-c:a','aac','-b:a','128k','-movflags','+faststart',str(out)])
+    out=UPLOAD_DIR/f'{p.stem}_{level}.mp4'
+    cmd = [
+        'ffmpeg',
+        '-y',
+        '-i', str(p),
+        '-vf', 'scale=1280:-2',
+        '-c:v', 'libx264',
+        '-preset', 'veryfast',
+        '-crf', '28',
+        '-threads', '2',
+        '-pix_fmt', 'yuv420p',
+        '-c:a', 'aac',
+        '-b:a', '128k',
+        '-movflags', '+faststart',
+        str(out),
+    ]
+    try:
+        subprocess.run(
+            cmd,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=600,
+        )
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(
+            'FFmpeg compression timed out after 10 minutes.'
+        )
+    except subprocess.CalledProcessError as e:
+        detail = (e.stderr or '').strip()[-4000:]
+        raise RuntimeError(
+            'FFmpeg compression failed:\n' + detail
+        )
     if not out.exists(): raise RuntimeError('Compressed file was not created')
     return out
 
