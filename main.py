@@ -26,6 +26,9 @@ load_dotenv(override=False)
 
 os.environ.setdefault('KMP_DUPLICATE_LIB_OK', 'TRUE')
 os.environ.setdefault('OMP_NUM_THREADS', '1')
+os.environ.setdefault('MKL_NUM_THREADS', '1')
+os.environ.setdefault('OPENBLAS_NUM_THREADS', '1')
+os.environ.setdefault('NUMEXPR_NUM_THREADS', '1')
 try: import whisper
 except ImportError: whisper=None
 try: import yt_dlp
@@ -70,7 +73,7 @@ COOKIE_SECURE = (
 )
 
 AUTH_SECRET=env('SMARTCLIP_AUTH_SECRET',default='CHANGE-ME')
-WHISPER_MODEL=env('WHISPER_MODEL',default='base')
+WHISPER_MODEL=env('WHISPER_MODEL',default='tiny')
 ALLOWED={'.mp4','.mov','.avi','.mkv','.webm'}
 whisper_model=None
 
@@ -486,6 +489,12 @@ def run_one_click_job(
 
         final = compress(original, compression)
 
+        if final != original:
+            try:
+                original.unlink()
+            except Exception:
+                pass
+
         job.update({
             'progress': 18,
             'message': 'Analyzing video...'
@@ -609,7 +618,8 @@ def run_one_click_job(
             })
 
             whisper_model = whisper.load_model(
-                WHISPER_MODEL
+                WHISPER_MODEL,
+                device='cpu'
             )
 
         wav = (
@@ -647,6 +657,11 @@ def run_one_click_job(
             raise RuntimeError(
                 f'Whisper transcription failed: {e}'
             )
+        finally:
+            try:
+                wav.unlink()
+            except Exception:
+                pass
 
         if not isinstance(transcription_result, dict):
             raise RuntimeError(
@@ -1042,11 +1057,6 @@ def run_one_click_job(
                 'text': h['text'],
                 'reason': h['reason']
             })
-
-        try:
-            wav.unlink()
-        except Exception:
-            pass
 
         result = {
             'message':
